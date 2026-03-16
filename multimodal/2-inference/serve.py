@@ -22,15 +22,34 @@ def model_fn(model_dir: str) -> MultiModalPredictor:
     try:
         model = MultiModalPredictor.load(model_dir)
 
-        # Extract column names from data processors
+        # Extract column names from df_preprocessor (most reliable source)
         col_names = []
-        if hasattr(model, "_data_processors"):
-            if "numerical" in model._data_processors:
-                col_names += model._data_processors["numerical"][0].numerical_column_names
-            if "categorical" in model._data_processors:
-                col_names += model._data_processors["categorical"][0].categorical_column_names
-            if "text" in model._data_processors:
-                col_names += model._data_processors["text"][0].text_column_names
+        if hasattr(model, "_df_preprocessor") and model._df_preprocessor is not None:
+            dfp = model._df_preprocessor
+            for attr in ["numerical_feature_names", "categorical_feature_names", "text_feature_names"]:
+                if hasattr(dfp, attr):
+                    col_names += getattr(dfp, attr)
+            # Fallback: try column_types dict
+            if not col_names and hasattr(dfp, "column_types"):
+                label = getattr(model, "_label_column", None) or getattr(dfp, "label_column", None)
+                col_names = [c for c in dfp.column_types.keys() if c != label]
+
+        # Fallback: try _data_processors
+        if not col_names and hasattr(model, "_data_processors"):
+            for key in ["numerical", "categorical", "text"]:
+                if key in model._data_processors:
+                    proc = model._data_processors[key][0]
+                    for attr in [f"{key}_column_names", f"{key}_columns"]:
+                        if hasattr(proc, attr):
+                            val = getattr(proc, attr)
+                            if val:
+                                col_names += list(val)
+                                break
+
+        # Last resort: hardcoded for this model
+        if not col_names:
+            col_names = ["CustServ Calls", "Account Length", "plan", "limit", "text"]
+            logging.warning(f"Using hardcoded column names: {col_names}")
 
         globals()["column_names"] = col_names
         logging.warning(f"Column names: {col_names}")
