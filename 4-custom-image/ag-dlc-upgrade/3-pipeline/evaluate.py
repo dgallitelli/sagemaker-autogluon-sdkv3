@@ -1,59 +1,55 @@
 """
-Evaluation script for SageMaker Pipelines.
+Evaluation script for SageMaker Processing step.
 
-Loads AutoGluon model and test data, computes evaluation metrics,
-and writes them to evaluation.json for conditional pipeline steps.
+Loads the trained AutoGluon model and test data, computes metrics,
+and writes evaluation.json for pipeline ConditionStep consumption.
 """
-import argparse
 import json
 import os
-from pathlib import Path
+import tarfile
 
-import pandas as pd
-from autogluon.tabular import TabularPredictor
-
-
-def get_input_path(path: str) -> str:
-    """Return the first file found in the given directory."""
-    files = [f for f in os.listdir(path) if not f.startswith(".")]
-    if not files:
-        raise FileNotFoundError(f"No files found in {path}")
-    if len(files) > 1:
-        print(f"WARN: multiple files found in {path}, using first: {files[0]}")
-    filename = os.path.join(path, files[0])
-    print(f"Using {filename}")
-    return filename
-
+from autogluon.tabular import TabularDataset, TabularPredictor
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model-dir", type=str, default="/opt/ml/processing/model")
-    parser.add_argument("--test-dir", type=str, default="/opt/ml/processing/test")
-    parser.add_argument("--output-dir", type=str, default="/opt/ml/processing/evaluation")
-    args = parser.parse_args()
+    model_dir = "/opt/ml/processing/model"
+    test_dir = "/opt/ml/processing/test"
+    output_dir = "/opt/ml/processing/evaluation"
 
-    print(f"Loading model from {args.model_dir}")
-    predictor = TabularPredictor.load(args.model_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Loading test data from {args.test_dir}")
-    test_file = get_input_path(args.test_dir)
-    test_data = pd.read_csv(test_file) if test_file.endswith(".csv") else pd.read_parquet(test_file)
+    # Extract model.tar.gz
+    model_tar = os.path.join(model_dir, "model.tar.gz")
+    extract_dir = "/opt/ml/processing/model_extracted"
+    with tarfile.open(model_tar) as tar:
+        tar.extractall(path=extract_dir, filter="data")
 
-    print("Running evaluation")
+    # Load model
+    predictor = TabularPredictor.load(extract_dir)
+    print(f"Loaded model with problem_type={predictor.problem_type}")
+
+    # Load test data
+    test_files = [f for f in os.listdir(test_dir) if f.endswith(".csv")]
+    test_data = TabularDataset(os.path.join(test_dir, test_files[0]))
+    print(f"Test data: {len(test_data)} rows")
+
+    # Evaluate
     perf = predictor.evaluate(test_data)
+    leaderboard = predictor.leaderboard(test_data, silent=True)
 
-    # Handle both dict and scalar returns
-    if isinstance(perf, dict):
-        metrics = {"metrics": {k: abs(v) for k, v in perf.items()}}
-    else:
-        eval_metric = predictor.eval_metric.name if hasattr(predictor.eval_metric, "name") else "metric"
-        metrics = {"metrics": {eval_metric: abs(perf)}}
+    print(f"Performance: {perf}")
+    print(f"Leaderboard:\n{leaderboard}")
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    output_path = os.path.join(args.output_dir, "evaluation.json")
+    # Write metrics in the format expected by JsonGet in ConditionStep
+    eval_metric = predictor.eval_metric.name if hasattr(predictor.eval_metric, "name") else str(predictor.eval_metric)
+    # evaluate() returns a dict in AG 1.x; extract the scalar value
+    metric_value = perf[eval_metric] if isinstance(perf, dict) else perf
+    metrics = {
+        "metrics": {
+            eval_metric: abs(metric_value),  # abs() because some metrics are negative (e.g., -log_loss)
+        }
+    }
 
-    print(f"Writing metrics to {output_path}")
-    print(json.dumps(metrics, indent=2))
-
-    with open(output_path, "w") as f:
+    eval_path = os.path.join(output_dir, "evaluation.json")
+    with open(eval_path, "w") as f:
         json.dump(metrics, f, indent=2)
+    print(f"Evaluation written to {eval_path}: {metrics}")

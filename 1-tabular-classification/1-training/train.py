@@ -53,9 +53,6 @@ if __name__ == "__main__":
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    if args.n_gpus:
-        config["num_gpus"] = args.n_gpus
-
     print("Training config:")
     pprint(config)
 

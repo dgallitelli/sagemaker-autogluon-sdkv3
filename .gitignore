@@ -31,6 +31,9 @@ logs/
 
 # Internal working docs
 .continue-here.md
+blog-post.md
+blog-critique.md
+blog-diagrams/
 
 # Test scripts
 **/test_deploy.py

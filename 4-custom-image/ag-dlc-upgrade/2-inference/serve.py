@@ -1,3 +1,4 @@
+# NOTE: This script is identical to 1-tabular-classification/2-inference/serve.py
 """
 AutoGluon Tabular inference script for SageMaker real-time endpoints.
 
@@ -6,7 +7,6 @@ Returns predictions + probabilities for classification, predictions for regressi
 
 Based on: autogluon-tabular-containers/scripts/tabular_serve.py
 """
-import os
 from io import BytesIO, StringIO
 
 import pandas as pd

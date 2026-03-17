@@ -1,3 +1,4 @@
+# NOTE: This script is identical to 1-tabular-classification/1-training/train.py
 """
 AutoGluon Tabular training script for SageMaker.
 
@@ -52,9 +53,6 @@ if __name__ == "__main__":
     config_file = get_input_path(args.ag_config)
     with open(config_file) as f:
         config = yaml.safe_load(f)
-
-    if args.n_gpus:
-        config["num_gpus"] = args.n_gpus
 
     print("Training config:")
     pprint(config)

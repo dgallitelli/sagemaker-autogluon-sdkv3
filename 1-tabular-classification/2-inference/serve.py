@@ -6,7 +6,6 @@ Returns predictions + probabilities for classification, predictions for regressi
 
 Based on: autogluon-tabular-containers/scripts/tabular_serve.py
 """
-import os
 from io import BytesIO, StringIO
 
 import pandas as pd

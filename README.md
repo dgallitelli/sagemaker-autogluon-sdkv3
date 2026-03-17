@@ -42,12 +42,12 @@ The first three experiments follow the same four-stage structure and demonstrate
 
 - An AWS account with SageMaker access
 - An IAM role with SageMaker execution permissions
-- Python 3.11+ with the SageMaker SDK v3 installed:
+- Python 3.11+ with the SageMaker SDK v3 installed (tested with v3.5.0):
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install "sagemaker>=3.0,<4.0" boto3 pandas jupyter
+pip install -r requirements.txt
 ```
 
 - Service quotas for the following instance types:
@@ -57,28 +57,15 @@ pip install "sagemaker>=3.0,<4.0" boto3 pandas jupyter
 
 ## Getting Started
 
-### 1. Download datasets
+### 1. Datasets
 
-Each experiment's `0-data-prep/` stage expects raw data in a local `data/` directory:
+No manual download is required. Each experiment's `0_upload_raw.ipynb` notebook copies data from the SageMaker example files S3 bucket to your default SageMaker bucket automatically.
 
-**Tabular Classification** — [UCI Adult Census](https://archive.ics.uci.edu/dataset/2/adult)
-```bash
-cd 1-tabular-classification/0-data-prep/data/
-curl -O https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data
-curl -O https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test
-```
+The datasets used are:
 
-**TimeSeries Forecasting** — [UCI Electricity Load Diagrams](https://archive.ics.uci.edu/dataset/321/electricityloaddiagrams20112014)
-```bash
-cd 2-timeseries-forecasting/0-data-prep/data/
-# Download LD2011_2014.txt from the UCI repository
-```
-
-**Multimodal** — Synthetic churn dataset (included as JSONL):
-```bash
-cd 3-multimodal/0-data-prep/data/
-# train.jsonl, validation.jsonl, test.jsonl — generate or provide your own
-```
+- **Tabular Classification** — [UCI Adult Census](https://archive.ics.uci.edu/dataset/2/adult): Binary income prediction from demographic features.
+- **TimeSeries Forecasting** — [UCI Electricity Load Diagrams](https://archive.ics.uci.edu/dataset/321/electricityloaddiagrams20112014): Hourly electricity consumption across 370 households.
+- **Multimodal** — Synthetic churn dataset with text, numerical, and categorical features.
 
 ### 2. Run notebooks in order
 
@@ -147,7 +134,29 @@ endpoint_config.delete()
 model.delete()
 ```
 
-Also delete pipeline executions and S3 artifacts if no longer needed.
+Delete SageMaker Pipelines when no longer needed:
+
+```python
+import boto3
+sm = boto3.client("sagemaker")
+sm.delete_pipeline(PipelineName="AutoGluonTabularPipeline")
+sm.delete_pipeline(PipelineName="AutoGluonTimeSeriesPipeline")
+sm.delete_pipeline(PipelineName="AutoGluonMultimodalPipeline")
+```
+
+If you used the custom image experiment, clean up the ECR repository:
+
+```bash
+aws ecr delete-repository --repository-name autogluon-custom --force
+```
+
+Also delete S3 artifacts if no longer needed:
+
+```bash
+aws s3 rm s3://<your-bucket>/autogluon-tabular/ --recursive
+aws s3 rm s3://<your-bucket>/autogluon-timeseries/ --recursive
+aws s3 rm s3://<your-bucket>/autogluon-multimodal/ --recursive
+```
 
 ## Security
 
