@@ -149,4 +149,4 @@ See [CONTRIBUTING](CONTRIBUTING.md) for more information.
 
 ## License
 
-This project is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file.

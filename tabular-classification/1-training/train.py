@@ -5,7 +5,6 @@ Runs inside the AutoGluon DLC container. Reads config from the 'config' channel,
 training data from 'train', optional test data from 'test', and an optional
 serving script from 'serving'.
 
-Based on: aws/amazon-sagemaker-examples autogluon-tabular-containers/scripts/tabular_train.py
 """
 import argparse
 import json
