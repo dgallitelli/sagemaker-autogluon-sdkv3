@@ -1,12 +1,12 @@
 # Custom Docker Images for AutoGluon on SageMaker
 
-Build custom Docker images with the latest AutoGluon version (1.5.0), instead of relying on the AWS-managed AutoGluon DLC (currently v1.4).
+Build custom Docker images for AutoGluon on SageMaker. Useful when you need custom dependencies, private packages, or a specific AutoGluon version pinned in your image.
 
 Two base image strategies are provided:
 
 | Sub-experiment | Base Image | When to Use |
 |---|---|---|
-| **ag-dlc-upgrade** | AutoGluon DLC v1.4 | Minimal changes — just upgrade the AG package. Inherits all DLC optimizations. |
+| **ag-dlc-upgrade** | AutoGluon DLC v1.5 | Minimal changes — add custom dependencies on top of the DLC. Inherits all DLC optimizations. |
 | **pytorch-dlc** | PyTorch DLC v2.6 | Full control — install AG from scratch on a well-maintained PyTorch base. |
 
 Both sub-experiments use the **tabular classification** (Adult Census) use case and follow the same structure:
@@ -55,7 +55,7 @@ Both sub-experiments use the **tabular classification** (Adult Census) use case 
 **ag-dlc-upgrade** if you:
 - Want the smallest possible diff from the official DLC
 - Need DLC-specific optimizations (SageMaker training toolkit, pre-configured TorchServe)
-- Just need a newer AutoGluon version
+- Just need to add custom dependencies on top of the DLC
 
 **pytorch-dlc** if you:
 - Want to control the full dependency stack

@@ -91,8 +91,8 @@ print(image_uris.retrieve(
 
 case "$SUB_EXPERIMENT" in
     ag-dlc-upgrade)
-        TRAINING_BASE=$(resolve_base_image autogluon training "version='1.4', py_version='py311',")
-        INFERENCE_BASE=$(resolve_base_image autogluon inference "version='1.4', py_version='py311',")
+        TRAINING_BASE=$(resolve_base_image autogluon training "version='1.5', py_version='py312',")
+        INFERENCE_BASE=$(resolve_base_image autogluon inference "version='1.5', py_version='py312',")
         ;;
     pytorch-dlc)
         TRAINING_BASE=$(resolve_base_image pytorch training "version='2.6', py_version='py312',")

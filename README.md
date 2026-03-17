@@ -42,7 +42,7 @@ The first three experiments follow the same four-stage structure and demonstrate
 
 - An AWS account with SageMaker access
 - An IAM role with SageMaker execution permissions
-- Python 3.11+ with the SageMaker SDK v3 installed (tested with v3.5.0):
+- Python 3.12+ with the SageMaker SDK v3 installed (tested with v3.5.0):
 
 ```bash
 python -m venv .venv
@@ -118,7 +118,7 @@ The AutoGluon DLC uses TorchServe and requires `code/inference.py` inside the `m
 
 ## Key Considerations
 
-- **AutoGluon DLC version**: 1.4 with Python 3.11 (latest available at time of writing)
+- **AutoGluon DLC version**: 1.5 with Python 3.12
 - **Multimodal GPU requirement**: The multimodal experiment requires GPU instances (`ml.g4dn.xlarge`) for training and inference due to the text transformer model
 - **TimeSeries inference**: Requires 48+ historical timestamps per item for reliable predictions
 - **Evaluation script naming**: The multimodal evaluation script is named `run_evaluation.py` (not `evaluate.py`) to avoid conflicts with the HuggingFace `evaluate` package
