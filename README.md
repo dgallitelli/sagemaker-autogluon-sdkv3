@@ -2,15 +2,16 @@
 
 Train, evaluate, deploy, and orchestrate [AutoGluon](https://auto.gluon.ai/) models on Amazon SageMaker using the **SageMaker Python SDK v3**.
 
-This repository demonstrates three ML use cases end-to-end:
+This repository demonstrates three ML use cases end-to-end, plus a custom Docker image example:
 
 | Experiment | Task | Dataset | Key Metric |
 |---|---|---|---|
 | **Tabular Classification** | Binary classification | UCI Adult Census | ROC AUC |
 | **TimeSeries Forecasting** | Multi-item forecasting | UCI Electricity | MASE |
 | **Multimodal** | Text + tabular fusion | Synthetic churn (text + numerical + categorical) | ROC AUC |
+| **Custom Image** | Custom Docker images | UCI Adult Census | ROC AUC |
 
-Each experiment follows the same four-stage structure and demonstrates SageMaker SDK v3 patterns for processing, training, real-time inference, and ML pipelines.
+The first three experiments follow the same four-stage structure and demonstrate SageMaker SDK v3 patterns for processing, training, real-time inference, and ML pipelines. The custom image experiment shows how to build and use your own Docker images with the latest AutoGluon version.
 
 ## Repository Structure
 
@@ -30,6 +31,11 @@ Each experiment follows the same four-stage structure and demonstrates SageMaker
   3-pipeline/
     pipeline.ipynb              # SageMaker Pipeline orchestration
     evaluate.py / run_evaluation.py  # Evaluation script for pipeline
+
+4-custom-image/               # Custom Docker images with latest AutoGluon
+  ag-dlc-upgrade/             # Upgrade AutoGluon DLC base image
+  pytorch-dlc/                # Install AutoGluon on PyTorch DLC base
+  (each contains: docker/, 0-build-push/, 1-training/, 2-inference/, 3-pipeline/)
 ```
 
 ## Prerequisites
