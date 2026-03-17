@@ -63,20 +63,20 @@ Each experiment's `0-data-prep/` stage expects raw data in a local `data/` direc
 
 **Tabular Classification** — [UCI Adult Census](https://archive.ics.uci.edu/dataset/2/adult)
 ```bash
-cd tabular-classification/0-data-prep/data/
+cd 1-tabular-classification/0-data-prep/data/
 curl -O https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data
 curl -O https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test
 ```
 
 **TimeSeries Forecasting** — [UCI Electricity Load Diagrams](https://archive.ics.uci.edu/dataset/321/electricityloaddiagrams20112014)
 ```bash
-cd timeseries-forecasting/0-data-prep/data/
+cd 2-timeseries-forecasting/0-data-prep/data/
 # Download LD2011_2014.txt from the UCI repository
 ```
 
 **Multimodal** — Synthetic churn dataset (included as JSONL):
 ```bash
-cd multimodal/0-data-prep/data/
+cd 3-multimodal/0-data-prep/data/
 # train.jsonl, validation.jsonl, test.jsonl — generate or provide your own
 ```
 

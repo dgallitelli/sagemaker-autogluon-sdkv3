@@ -33,7 +33,7 @@ Both sub-experiments use the **tabular classification** (Adult Census) use case 
 
 ## Prerequisites
 
-1. **Processed data from tabular-classification**: Run `tabular-classification/0-data-prep/` first to upload and preprocess the Adult Census dataset. Both sub-experiments reuse that processed data in S3.
+1. **Processed data from tabular-classification**: Run `1-tabular-classification/0-data-prep/` first to upload and preprocess the Adult Census dataset. Both sub-experiments reuse that processed data in S3.
 
 2. **Finch installed**: This project uses [Finch](https://github.com/runfinch/finch) (not Docker) for container builds:
    ```bash
@@ -71,7 +71,7 @@ Both sub-experiments use the **tabular classification** (Adult Census) use case 
    - Pushes both images to your ECR repository
 
 2. **Train** (`1-training/launch_training.ipynb`):
-   - Same `ModelTrainer` pattern as the tabular-classification experiment
+   - Same `ModelTrainer` pattern as the 1-tabular-classification experiment
    - Uses your custom ECR image instead of the managed DLC
 
 3. **Deploy** (`2-inference/deploy.ipynb`):
