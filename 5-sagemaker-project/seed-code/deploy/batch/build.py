@@ -70,8 +70,15 @@ def extend_config(args, model_package_arn, stage_config):
         # accepted: it keeps the IAM RoleName/Lambda FunctionName/EventBridge Rule Name
         # under their respective 64-char limits regardless of SageMakerProjectName length,
         # at the cost of CloudFormation replacing (not updating in place) those three
-        # resources on every deploy.
-        "LambdaResourceNamePrefix": name_from_base(args.sagemaker_project_name, max_length=31),
+        # resources on every deploy. stage_name is prepended (not appended) to the base
+        # string because staging and prod are built back-to-back within the same script
+        # run and can land in the same millisecond timestamp; name_from_base truncates the
+        # base to only `max_length - len(timestamp) - 1` chars (7, given max_length=31), so
+        # putting stage_name first guarantees it survives truncation and differentiates the
+        # two stages even when args.sagemaker_project_name alone would consume that entire
+        # budget. Without this, staging and prod would collide on the account/region-scoped
+        # RunTransformLambdaRole/RunTransformLambda/ScheduleRule resource names.
+        "LambdaResourceNamePrefix": name_from_base(f"{stage_name}-{args.sagemaker_project_name}", max_length=31),
     }
     new_tags = {
         "sagemaker:deployment-stage": stage_name,
