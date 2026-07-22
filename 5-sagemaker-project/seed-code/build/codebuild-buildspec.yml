@@ -11,7 +11,7 @@ phases:
     commands:
       - export PYTHONUNBUFFERED=TRUE
       - export SAGEMAKER_PROJECT_NAME_ID="${SAGEMAKER_PROJECT_NAME}-${SAGEMAKER_PROJECT_ID}"
-      - aws s3 cp config/tabular.yaml "s3://${ARTIFACT_BUCKET}/AutoML/pipeline/config/tabular.yaml"
+      - aws s3 cp config/tabular.yaml "s3://${ARTIFACT_BUCKET}/${SAGEMAKER_PROJECT_NAME_ID}/pipeline/config/tabular.yaml"
       - |
         run-pipeline --module-name pipelines.automl.pipeline \
           --role-arn $SAGEMAKER_PIPELINE_ROLE_ARN \
