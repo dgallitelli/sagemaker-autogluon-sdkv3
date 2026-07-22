@@ -1,0 +1,224 @@
+"""AutoGluon AutoML SageMaker Pipeline (SDK v3) for SageMaker Projects CI/CD.
+
+Preprocess -> Train -> Evaluate -> Condition (metric >= threshold) ->
+RegisterModel (else FailStep). Implements get_pipeline(**kwargs) for the
+petro-build-style pipelines._utils.get_pipeline_driver integration.
+
+Registration uses ModelBuilder(...).register(...) -> ModelStep. Do NOT call
+.register() on a plain sagemaker.core.resources.Model — that resolves to
+Python's ABCMeta.register() (virtual-subclass registration), not the Model
+Registry API. Verified against sagemaker==3.16.0.
+"""
+import os
+
+import boto3
+from sagemaker.core import image_uris
+from sagemaker.core.helper.session_helper import Session, get_execution_role
+from sagemaker.core.processing import ProcessingInput, ProcessingOutput, ScriptProcessor
+from sagemaker.core.shapes.shapes import ProcessingS3Input, ProcessingS3Output
+from sagemaker.core.training.configs import Compute, OutputDataConfig, SourceCode, StoppingCondition
+from sagemaker.core.workflow.conditions import ConditionGreaterThanOrEqualTo
+from sagemaker.core.workflow.functions import JsonGet
+from sagemaker.core.workflow.parameters import ParameterFloat, ParameterString
+from sagemaker.core.workflow.pipeline_context import PipelineSession
+from sagemaker.core.workflow.properties import PropertyFile
+from sagemaker.mlops.workflow.condition_step import ConditionStep
+from sagemaker.mlops.workflow.fail_step import FailStep
+from sagemaker.mlops.workflow.model_step import ModelStep
+from sagemaker.mlops.workflow.pipeline import Pipeline
+from sagemaker.mlops.workflow.steps import ProcessingStep, TrainingStep
+from sagemaker.serve import ModelBuilder
+from sagemaker.train import ModelTrainer
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+
+def get_sagemaker_client(region):
+    return boto3.Session(region_name=region).client("sagemaker")
+
+
+def get_pipeline_custom_tags(new_tags, region, sagemaker_project_name=None):
+    try:
+        sm_client = get_sagemaker_client(region)
+        project_arn = sm_client.describe_project(ProjectName=sagemaker_project_name)["ProjectArn"]
+        for tag in sm_client.list_tags(ResourceArn=project_arn)["Tags"]:
+            new_tags.append(tag)
+    except Exception as e:  # noqa: BLE001 — tagging is best-effort
+        print(f"Error getting project tags: {e}")
+    return new_tags
+
+
+def get_pipeline(
+    region,
+    role=None,
+    default_bucket=None,
+    model_package_group_name="AutoMLModels",
+    pipeline_name="AutoMLPipeline",
+    base_job_prefix="AutoML",
+    processing_instance_type="ml.m5.xlarge",
+    training_instance_type="ml.m5.2xlarge",
+    # NOTE: sagemaker==3.16.0's bundled image_uri_config/autogluon.json only
+    # validates py311 for AutoGluon training version 1.5.0, while AWS DLC's ECR
+    # repository (763104351884.dkr.ecr.<region>.amazonaws.com/autogluon-training)
+    # publishes only py312 tags for 1.5.0 (no py311 variant exists). Until the SDK
+    # ships updated image URI config data, image_uris.retrieve(version="1.5",
+    # py_version="py312", ...) raises ValueError for every region. 1.4/py311 is the
+    # newest combination that is both SDK-valid and has a real ECR image.
+    ag_version="1.4",
+    py_version="py311",
+    config_file="tabular.yaml",
+    sagemaker_project_name=None,
+):
+    """Build the AutoGluon AutoML pipeline: Preprocess -> Train -> Evaluate -> Condition -> Register."""
+    import yaml
+
+    sagemaker_session = Session()
+    pipeline_session = PipelineSession()
+
+    if role is None:
+        role = get_execution_role()
+    if default_bucket is None:
+        default_bucket = sagemaker_session.default_bucket()
+
+    # Read eval_metric from the local config file (uploaded to S3 by the buildspec
+    # before this pipeline is built) so the ConditionStep's JsonGet knows which key
+    # to read out of evaluation.json. BASE_DIR is .../pipelines/automl; config/ is
+    # two levels up, at the package root (.../build/config/).
+    build_root = os.path.dirname(os.path.dirname(BASE_DIR))
+    config_path = os.path.join(build_root, "config", config_file)
+    with open(config_path) as f:
+        eval_metric = yaml.safe_load(f).get("eval_metric", "roc_auc")
+
+    s3_prefix = f"s3://{default_bucket}/{base_job_prefix}/pipeline"
+    config_s3_uri = f"{s3_prefix}/config/"
+
+    param_input_data_uri = ParameterString(
+        name="InputDataUri", default_value=f"s3://{default_bucket}/{base_job_prefix}/raw/"
+    )
+    param_training_instance_type = ParameterString(name="TrainingInstanceType", default_value=training_instance_type)
+    param_model_approval_status = ParameterString(name="ModelApprovalStatus", default_value="PendingManualApproval")
+    param_metric_threshold = ParameterFloat(name="MetricThreshold", default_value=0.75)
+
+    ag_training_image = image_uris.retrieve(
+        "autogluon", region=region, version=ag_version, py_version=py_version,
+        image_scope="training", instance_type=training_instance_type,
+    )
+    sklearn_image = image_uris.retrieve("sklearn", region=region, version="1.2-1")
+
+    # -- Step 1: Preprocess --
+    preprocessor = ScriptProcessor(
+        image_uri=sklearn_image, role=role, command=["python3"],
+        instance_type=processing_instance_type, instance_count=1,
+        base_job_name=f"{base_job_prefix}-preprocess", sagemaker_session=pipeline_session,
+    )
+    step_preprocess = ProcessingStep(
+        name="PreprocessData",
+        step_args=preprocessor.run(
+            code=os.path.join(BASE_DIR, "preprocess.py"),
+            inputs=[ProcessingInput(input_name="input", s3_input=ProcessingS3Input(
+                s3_uri=param_input_data_uri, local_path="/opt/ml/processing/input", s3_data_type="S3Prefix"))],
+            outputs=[
+                ProcessingOutput(output_name="train", s3_output=ProcessingS3Output(
+                    s3_uri=f"{s3_prefix}/processed/train/", local_path="/opt/ml/processing/train", s3_upload_mode="EndOfJob")),
+                ProcessingOutput(output_name="test", s3_output=ProcessingS3Output(
+                    s3_uri=f"{s3_prefix}/processed/test/", local_path="/opt/ml/processing/test", s3_upload_mode="EndOfJob")),
+            ],
+        ),
+    )
+
+    # -- Step 2: Train --
+    trainer = ModelTrainer(
+        training_image=ag_training_image, role=role,
+        source_code=SourceCode(source_dir=BASE_DIR, entry_script="train.py"),
+        compute=Compute(instance_type=param_training_instance_type, instance_count=1,
+                         volume_size_in_gb=100, keep_alive_period_in_seconds=0),
+        output_data_config=OutputDataConfig(s3_output_path=f"{s3_prefix}/model/"),
+        base_job_name=f"{base_job_prefix}-train",
+        stopping_condition=StoppingCondition(max_runtime_in_seconds=7200),
+        sagemaker_session=pipeline_session,
+    )
+    step_train = TrainingStep(
+        name="TrainAutoGluon",
+        step_args=trainer.train(input_data_config=[
+            {"channel_name": "train", "data_source": {"s3_data_source": {
+                "s3_uri": step_preprocess.properties.ProcessingOutputConfig.Outputs["train"].S3Output.S3Uri,
+                "s3_data_type": "S3Prefix"}}},
+            {"channel_name": "test", "data_source": {"s3_data_source": {
+                "s3_uri": step_preprocess.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
+                "s3_data_type": "S3Prefix"}}},
+            {"channel_name": "config", "data_source": {"s3_data_source": {
+                "s3_uri": config_s3_uri, "s3_data_type": "S3Prefix"}}},
+        ]),
+    )
+
+    # -- Step 3: Evaluate --
+    evaluation_report = PropertyFile(name="EvaluationReport", output_name="evaluation", path="evaluation.json")
+    evaluator = ScriptProcessor(
+        image_uri=ag_training_image, role=role, command=["python3"],
+        instance_type=processing_instance_type, instance_count=1,
+        base_job_name=f"{base_job_prefix}-evaluate", sagemaker_session=pipeline_session,
+    )
+    step_evaluate = ProcessingStep(
+        name="EvaluateModel",
+        step_args=evaluator.run(
+            code=os.path.join(BASE_DIR, "evaluate.py"),
+            inputs=[
+                ProcessingInput(input_name="model", s3_input=ProcessingS3Input(
+                    s3_uri=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+                    local_path="/opt/ml/processing/model", s3_data_type="S3Prefix")),
+                ProcessingInput(input_name="test", s3_input=ProcessingS3Input(
+                    s3_uri=step_preprocess.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
+                    local_path="/opt/ml/processing/test", s3_data_type="S3Prefix")),
+                ProcessingInput(input_name="config", s3_input=ProcessingS3Input(
+                    s3_uri=config_s3_uri, local_path="/opt/ml/processing/config", s3_data_type="S3Prefix")),
+            ],
+            outputs=[ProcessingOutput(output_name="evaluation", s3_output=ProcessingS3Output(
+                s3_uri=f"{s3_prefix}/evaluation/", local_path="/opt/ml/processing/evaluation", s3_upload_mode="EndOfJob"))],
+        ),
+        property_files=[evaluation_report],
+    )
+
+    # -- Step 4: Register (via ModelBuilder — see module docstring) --
+    model_builder = ModelBuilder(
+        image_uri=ag_training_image,
+        s3_model_data_url=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+        role_arn=role,
+        sagemaker_session=pipeline_session,
+    )
+    step_register = ModelStep(
+        name="RegisterModel",
+        step_args=model_builder.register(
+            content_types=["text/csv", "application/json"],
+            response_types=["application/json"],
+            inference_instances=["ml.m5.xlarge"],
+            transform_instances=["ml.m5.xlarge"],
+            model_package_group_name=model_package_group_name,
+            approval_status=param_model_approval_status,
+        ),
+    )
+
+    # -- Step 5: Condition (metric gate) --
+    step_fail = FailStep(
+        name="AutoMLQualityGateFailed",
+        error_message="Evaluation metric is below MetricThreshold. Model not registered.",
+    )
+    step_condition = ConditionStep(
+        name="CheckEvaluationCondition",
+        conditions=[ConditionGreaterThanOrEqualTo(
+            left=JsonGet(
+                step_name=step_evaluate.name,
+                property_file=evaluation_report,
+                json_path=f"metrics.{eval_metric}",
+            ),
+            right=param_metric_threshold,
+        )],
+        if_steps=[step_register],
+        else_steps=[step_fail],
+    )
+
+    return Pipeline(
+        name=pipeline_name,
+        parameters=[param_input_data_uri, param_training_instance_type, param_model_approval_status, param_metric_threshold],
+        steps=[step_preprocess, step_train, step_evaluate, step_condition],
+        sagemaker_session=pipeline_session,
+    )
