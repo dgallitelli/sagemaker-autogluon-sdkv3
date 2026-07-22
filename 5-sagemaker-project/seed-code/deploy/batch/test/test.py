@@ -48,9 +48,12 @@ if __name__ == "__main__":
     with open(args.import_build_config) as f:
         config = json.load(f)
 
-    function_name = "sagemaker-{}-{}-run-transform".format(
-        config["Parameters"]["SageMakerProjectName"], config["Parameters"]["StageName"]
-    )
+    # The Lambda's actual name is sagemaker-{LambdaResourceNamePrefix}-run-transform (see
+    # batch-transform-template.yml), where LambdaResourceNamePrefix is a name_from_base(...)
+    # value computed by build.py (stage+project name, truncated, plus a fresh timestamp) — not
+    # a simple "{SageMakerProjectName}-{StageName}" string. Read the real prefix from the
+    # exported build config instead of reconstructing it.
+    function_name = "sagemaker-{}-run-transform".format(config["Parameters"]["LambdaResourceNamePrefix"])
     results = invoke_and_verify(function_name, args.fixture_bucket, args.fixture_input_prefix, args.fixture_output_prefix)
 
     with open(args.export_test_results, "w") as f:
