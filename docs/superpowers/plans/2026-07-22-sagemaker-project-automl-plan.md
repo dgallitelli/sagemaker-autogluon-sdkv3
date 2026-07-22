@@ -1123,7 +1123,7 @@ def main() -> None:
             timestamp_column=config.get("timestamp_column", "timestamp"),
         )
         perf = predictor.evaluate(test_data)
-        eval_metric = predictor.eval_metric
+        eval_metric = predictor.eval_metric.name if hasattr(predictor.eval_metric, "name") else str(predictor.eval_metric)
 
     elif task_type == "multimodal":
         import pandas as pd
