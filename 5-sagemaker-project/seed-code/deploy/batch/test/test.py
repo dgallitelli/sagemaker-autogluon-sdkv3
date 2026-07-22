@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 import os
-import time
+import uuid
 
 import boto3
 
@@ -15,9 +15,12 @@ s3_client = boto3.client("s3")
 
 def invoke_and_verify(function_name, bucket, input_prefix, output_prefix):
     # SageMaker transform job names must be unique per account/region; a hardcoded name
-    # collides with a job left over from any prior pipeline run/retry (ResourceInUse), so
-    # suffix with a timestamp.
-    transform_job_name = f"staging-test-transform-{int(time.time())}"
+    # collides with a job left over from any prior pipeline run/retry (ResourceInUse). A
+    # second-resolution timestamp (int(time.time())) is not sufficiently unique either — two
+    # pipeline executions/retries triggered in quick succession (common with auto-retriggered
+    # CodePipeline executions from rapid source pushes) can land in the same wall-clock second
+    # and collide. Use a random uuid4 suffix instead, which is unique regardless of timing.
+    transform_job_name = f"staging-test-transform-{uuid.uuid4().hex[:12]}"
     payload = {
         "model_name": None,  # resolved by the Lambda's own env var at runtime
         "transform_job_name": transform_job_name,
