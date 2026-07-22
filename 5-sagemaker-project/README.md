@@ -78,11 +78,26 @@ seed-code/
        "s3://sagemaker-project-<project-id>/<project-name>-<project-id>/raw/${filename}"
    done
    ```
-3. Push a change to the `<project>-build` repo (or wait for the initial push) to trigger the
+3. Upload a batch-transform test fixture to `s3://<ARTIFACT_BUCKET>/AutoML/batch-test-input/`
+   before the Deploy-batch pipeline's `TestStaging` stage will pass — nothing in the project
+   setup does this for you. The fixture must be a small headerless CSV (3 rows recommended) with
+   columns matching your model's training features. For the default tabular config, use the same
+   Adult Census feature columns as `seed-code/build/config/tabular.yaml`:
+   ```bash
+   # Create a minimal fixture matching your model's training schema (headerless CSV)
+   # Example for Adult Census (matching serve_batch.py's expected input):
+   cat > fixture.csv << 'EOF'
+   39,State-gov,77516,Bachelors,13,Never-married,Adm-clerical,Not-in-family,White,Male,2174,0,40,United-States
+   50,Self-emp-inc,83311,Bachelors,13,Married-civ-spouse,Exec-managerial,Husband,White,Male,0,0,13,United-States
+   38,Private,215646,HS-grad,9,Divorced,Handlers-cleaners,Not-in-family,White,Male,0,0,40,United-States
+   EOF
+   aws s3 cp fixture.csv s3://sagemaker-project-<project-id>/AutoML/batch-test-input/fixture.csv
+   ```
+4. Push a change to the `<project>-build` repo (or wait for the initial push) to trigger the
    Build pipeline: preprocess -> train -> evaluate -> register (`PendingManualApproval`).
-4. Approve the registered model package in the SageMaker Studio Model Registry UI (or via
+5. Approve the registered model package in the SageMaker Studio Model Registry UI (or via
    `aws sagemaker update-model-package --model-approval-status Approved`).
-5. Both Deploy pipelines trigger automatically off the approval event, deploying to staging,
+6. Both Deploy pipelines trigger automatically off the approval event, deploying to staging,
    running an automated test, then waiting for manual approval before deploying to production.
 
 ## How It Works
