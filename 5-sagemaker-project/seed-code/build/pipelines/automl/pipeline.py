@@ -241,22 +241,34 @@ def get_pipeline(
     )
 
     # -- Step 4: Register (via ModelBuilder — see module docstring) --
-    # The AutoGluon inference DLC uses TorchServe and expects code/inference.py inside the
+    # The AutoGluon inference DLC uses TorchServe and expects code/<entry point> inside the
     # model archive (same requirement documented in
     # 1-tabular-classification/2-inference/deploy.ipynb, which repacks the model tarball with
     # serve.py by hand). AutoGluon's own training output only contains predictor artifacts
     # (*.pkl), not a code/ dir, so without this the container falls back to its default
     # PyTorch handler and crashes on load ("Exactly one .pth or .pt file is required for
     # PyTorch models: []") — confirmed directly against a deployed endpoint during Task 10 e2e
-    # testing. Passing source_code here makes ModelBuilder set is_repack()=True; since
-    # s3_model_data_url is a PipelineVariable (step_train's not-yet-known S3 output) and this
-    # runs under a PipelineSession, ModelStep automatically inserts a runtime _RepackModelStep
-    # that merges serve.py into the trained model artifact as code/inference.py before
-    # registration — the SDK v3 equivalent of the manual tarfile repack in the experiment-1
-    # notebook. serve.py lives alongside this file (a copy of
-    # 5-sagemaker-project/seed-code/deploy/realtime/serve.py — this pipeline's build repo is a
-    # separate GitHub repo/CodeBuild checkout from the deploy repo, so it needs its own copy,
-    # not a cross-repo relative path).
+    # testing.
+    #
+    # The actual code/serve.py packaging happens in train.py (it copies serve.py from
+    # /opt/ml/code, where SageMaker's training toolkit extracts this training job's own
+    # SourceCode, into {model_dir}/code/serve.py so it's included in the model.tar.gz SageMaker
+    # auto-uploads from SM_MODEL_DIR) — NOT via ModelBuilder/ModelStep's "runtime repack"
+    # mechanism, which looks like the natural SDK v3 fit here (pass source_code=SourceCode(...)
+    # to ModelBuilder, matching ModelTrainer's own pattern above) but is silently a no-op:
+    # ModelStep._append_repack_model_step() only inserts a _RepackModelStep when
+    # isinstance(self._model, sagemaker.core.resources.Model) — and self._model is actually the
+    # ModelBuilder instance itself (see @runnable_by_pipeline's
+    # init_model_step_arguments(self_instance) in sagemaker.core.workflow.pipeline_context),
+    # which is not a Model subclass, so the isinstance check fails and the method returns early
+    # with "No models to repack" logged (not raised) — confirmed directly by reading
+    # sagemaker-serve==1.16.0 / sagemaker-mlops==1.16.0 source and by observing a model package
+    # with SAGEMAKER_PROGRAM=serve.py / SAGEMAKER_SUBMIT_DIRECTORY=/opt/ml/model/code correctly
+    # set in its Environment, yet an unmodified model.tar.gz with no code/ dir at all (verified
+    # by downloading and inspecting the actual S3 artifact). source_code is still passed to
+    # ModelBuilder here anyway because it's what sets those Environment variables correctly on
+    # the registered container — train.py's copy just has to independently place the file where
+    # those variables say it will be.
     model_builder = ModelBuilder(
         image_uri=ag_inference_image,
         s3_model_data_url=step_train.properties.ModelArtifacts.S3ModelArtifacts,

@@ -8,6 +8,7 @@ to the matching AutoGluon predictor. Writes evaluation.json in the shape
 import argparse
 import json
 import os
+import shutil
 from pprint import pprint
 
 import yaml
@@ -151,6 +152,37 @@ def main() -> None:
         print(json.dumps(metrics))
 
     print(f"Model saved to {save_path}")
+
+    # Package inference code into the model artifact so the registered model package's
+    # container actually knows how to serve it. The AutoGluon inference DLC (TorchServe-based)
+    # requires code/<entry point> inside the model.tar.gz, matching the SAGEMAKER_PROGRAM /
+    # SAGEMAKER_SUBMIT_DIRECTORY environment variables set on the model package's container
+    # (see pipeline.py's ModelBuilder(source_code=SourceCode(..., entry_script="serve.py"))) --
+    # without it, the container falls back to a default PyTorch handler that crashes on load
+    # (AutoGluon's output is predictor pickle files, not a .pth/.pt checkpoint). SageMaker's
+    # training toolkit extracts this training job's SourceCode (source_dir=BASE_DIR in
+    # pipeline.py, which includes serve.py) to /opt/ml/code inside this container -- copy it
+    # from there into {model_dir}/code/serve.py (same filename, so it matches
+    # SAGEMAKER_PROGRAM=serve.py exactly) so it ends up inside the model.tar.gz that SageMaker
+    # automatically uploads from SM_MODEL_DIR. This is deliberately done here (at training time)
+    # rather than relying on ModelBuilder/ModelStep's "runtime repack" mechanism: that mechanism
+    # silently never triggers for ModelBuilder.register() under a PipelineSession, because
+    # ModelStep's _append_repack_model_step() only recognizes plain
+    # sagemaker.core.resources.Model/PipelineModel instances via isinstance(), not ModelBuilder
+    # (confirmed by reading sagemaker-serve==1.16.0's and sagemaker-mlops==1.16.0's source
+    # directly) -- so SAGEMAKER_PROGRAM/SAGEMAKER_SUBMIT_DIRECTORY end up correctly set on the
+    # registered model package's container environment, but the actual code/ directory never
+    # gets added to the model artifact, and the container still crashes on load. Doing it here
+    # avoids depending on that broken code path entirely.
+    submit_dir = os.environ.get("SM_SUBMIT_DIRECTORY", "/opt/ml/code")
+    serve_script_src = os.path.join(submit_dir, "serve.py")
+    if os.path.exists(serve_script_src):
+        code_dir = os.path.join(save_path, "code")
+        os.makedirs(code_dir, exist_ok=True)
+        shutil.copy2(serve_script_src, os.path.join(code_dir, "serve.py"))
+        print(f"Copied {serve_script_src} to {os.path.join(code_dir, 'serve.py')}")
+    else:
+        print(f"WARN: {serve_script_src} not found; model package will not have inference code")
 
 
 if __name__ == "__main__":
