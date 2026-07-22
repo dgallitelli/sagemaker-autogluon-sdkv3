@@ -2100,6 +2100,31 @@ def test_handler_raises_on_failed_transform_job():
             assert False, "expected Exception"
         except Exception as e:
             assert "boom" in str(e)
+
+
+def test_handler_falls_back_to_model_name_env_var(monkeypatch):
+    import run_transform
+
+    monkeypatch.setenv("MODEL_NAME", "env-fallback-model")
+
+    fake_event = {
+        "model_name": None,
+        "transform_job_name": "test-transform-fallback",
+        "input_s3_uri": "s3://bucket/input/",
+        "output_s3_uri": "s3://bucket/output/",
+        "instance_type": "ml.m5.xlarge",
+        "instance_count": 1,
+        "content_type": "text/csv",
+    }
+
+    mock_client = MagicMock()
+    mock_client.describe_transform_job.return_value = {"TransformJobStatus": "Completed"}
+
+    with patch.object(run_transform, "sm_client", mock_client):
+        run_transform.handler(fake_event, None)
+
+    call_kwargs = mock_client.create_transform_job.call_args.kwargs
+    assert call_kwargs["ModelName"] == "env-fallback-model"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2118,8 +2143,12 @@ Expected: FAIL — `lambda/run_transform.py` does not exist yet.
 """Lambda handler: launch a SageMaker batch Transform job and wait for it.
 
 Invoked synchronously by the deploy pipeline's staging Test stage, and on a
-schedule (EventBridge rule) in prod.
+schedule (EventBridge rule) in prod. model_name falls back to the MODEL_NAME
+env var (set by batch-transform-template.yml) when the caller's event
+payload omits it — the staging Test stage does this deliberately, since it
+doesn't know the CFN-generated SageMaker Model name ahead of time.
 """
+import os
 import time
 
 import boto3
@@ -2132,10 +2161,11 @@ MAX_POLL_ATTEMPTS = 120  # 60 minutes
 
 def handler(event, context):
     transform_job_name = event["transform_job_name"]
+    model_name = event.get("model_name") or os.environ["MODEL_NAME"]
 
     sm_client.create_transform_job(
         TransformJobName=transform_job_name,
-        ModelName=event["model_name"],
+        ModelName=model_name,
         TransformInput={
             "DataSource": {"S3DataSource": {"S3DataType": "S3Prefix", "S3Uri": event["input_s3_uri"]}},
             "ContentType": event["content_type"],
@@ -2169,7 +2199,7 @@ cd 5-sagemaker-project/seed-code/deploy/batch
 python3 -m pytest tests/test_run_transform.py -v
 ```
 
-Expected: `2 passed`.
+Expected: `3 passed`.
 
 - [ ] **Step 5: Write `build.py`, `buildspec.yml`, configs** (same pattern as Task 6, adjusted
   for the batch resources)
