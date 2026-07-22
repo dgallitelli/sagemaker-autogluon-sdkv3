@@ -241,11 +241,28 @@ def get_pipeline(
     )
 
     # -- Step 4: Register (via ModelBuilder — see module docstring) --
+    # The AutoGluon inference DLC uses TorchServe and expects code/inference.py inside the
+    # model archive (same requirement documented in
+    # 1-tabular-classification/2-inference/deploy.ipynb, which repacks the model tarball with
+    # serve.py by hand). AutoGluon's own training output only contains predictor artifacts
+    # (*.pkl), not a code/ dir, so without this the container falls back to its default
+    # PyTorch handler and crashes on load ("Exactly one .pth or .pt file is required for
+    # PyTorch models: []") — confirmed directly against a deployed endpoint during Task 10 e2e
+    # testing. Passing source_code here makes ModelBuilder set is_repack()=True; since
+    # s3_model_data_url is a PipelineVariable (step_train's not-yet-known S3 output) and this
+    # runs under a PipelineSession, ModelStep automatically inserts a runtime _RepackModelStep
+    # that merges serve.py into the trained model artifact as code/inference.py before
+    # registration — the SDK v3 equivalent of the manual tarfile repack in the experiment-1
+    # notebook. serve.py lives alongside this file (a copy of
+    # 5-sagemaker-project/seed-code/deploy/realtime/serve.py — this pipeline's build repo is a
+    # separate GitHub repo/CodeBuild checkout from the deploy repo, so it needs its own copy,
+    # not a cross-repo relative path).
     model_builder = ModelBuilder(
         image_uri=ag_inference_image,
         s3_model_data_url=step_train.properties.ModelArtifacts.S3ModelArtifacts,
         role_arn=role,
         sagemaker_session=pipeline_session,
+        source_code=SourceCode(source_dir=BASE_DIR, entry_script="serve.py"),
     )
     step_register = ModelStep(
         name="RegisterModel",
