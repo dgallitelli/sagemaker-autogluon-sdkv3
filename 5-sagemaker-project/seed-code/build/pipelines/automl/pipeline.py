@@ -48,8 +48,8 @@ def get_pipeline_custom_tags(new_tags, region, sagemaker_project_name=None):
     return new_tags
 
 
-def _retrieve_autogluon_training_image(region, ag_version, py_version, instance_type):
-    """Resolve the AutoGluon training image URI.
+def _retrieve_autogluon_image(region, ag_version, py_version, instance_type, image_scope):
+    """Resolve an AutoGluon training or inference image URI.
 
     Works around a persistent bug in sagemaker SDK's bundled image config
     (confirmed across versions 3.5.0-3.16.0): it lists only py311 as valid
@@ -57,17 +57,25 @@ def _retrieve_autogluon_training_image(region, ag_version, py_version, instance_
     for that version. For ag_version=1.5/py_version=py312 specifically,
     resolve the registry/repository via a working py_version first, then
     substitute the real, confirmed-existing ECR tag.
+
+    image_scope must be "training" or "inference" — these are two distinct
+    ECR repositories (autogluon-training / autogluon-inference). Only the
+    inference image has the real serving entrypoint; using the training
+    image to serve a real-time endpoint or batch transform job produces a
+    container that never passes the ping health check (verified during
+    Task 10 e2e testing — the training image's default CMD does not start
+    a model server at all).
     """
     if ag_version == "1.5" and py_version == "py312":
         base_uri = image_uris.retrieve(
             "autogluon", region=region, version=ag_version, py_version="py311",
-            image_scope="training", instance_type=instance_type,
+            image_scope=image_scope, instance_type=instance_type,
         )
         registry_and_repo = base_uri.split(":")[0]
         return f"{registry_and_repo}:1.5-cpu-py312-ubuntu22.04-v1"
     return image_uris.retrieve(
         "autogluon", region=region, version=ag_version, py_version=py_version,
-        image_scope="training", instance_type=instance_type,
+        image_scope=image_scope, instance_type=instance_type,
     )
 
 
@@ -114,7 +122,7 @@ def get_pipeline(
     # repository (763104351884.dkr.ecr.<region>.amazonaws.com/autogluon-training)
     # publishes only py312 tags for 1.5.0 (no py311 variant exists). This repo's
     # standard is AutoGluon 1.5/py312 (matches the other four experiments), so
-    # _retrieve_autogluon_training_image() below works around the stale SDK
+    # _retrieve_autogluon_image() below works around the stale SDK
     # config directly instead of downgrading the target version.
     ag_version="1.5",
     py_version="py312",
@@ -149,7 +157,14 @@ def get_pipeline(
     param_model_approval_status = ParameterString(name="ModelApprovalStatus", default_value="PendingManualApproval")
     param_metric_threshold = ParameterFloat(name="MetricThreshold", default_value=0.75)
 
-    ag_training_image = _retrieve_autogluon_training_image(region, ag_version, py_version, training_instance_type)
+    ag_training_image = _retrieve_autogluon_image(
+        region, ag_version, py_version, training_instance_type, image_scope="training")
+    # Used only for RegisterModel: the model package's inference container must be the
+    # autogluon-inference image (it has the real serving entrypoint), not autogluon-training —
+    # using the training image to serve real-time/batch inference silently fails the endpoint's
+    # ping health check (see _retrieve_autogluon_image's docstring).
+    ag_inference_image = _retrieve_autogluon_image(
+        region, ag_version, py_version, "ml.m5.xlarge", image_scope="inference")
     sklearn_image = image_uris.retrieve("sklearn", region=region, version="1.2-1")
 
     # -- Step 1: Preprocess --
@@ -227,7 +242,7 @@ def get_pipeline(
 
     # -- Step 4: Register (via ModelBuilder — see module docstring) --
     model_builder = ModelBuilder(
-        image_uri=ag_training_image,
+        image_uri=ag_inference_image,
         s3_model_data_url=step_train.properties.ModelArtifacts.S3ModelArtifacts,
         role_arn=role,
         sagemaker_session=pipeline_session,
