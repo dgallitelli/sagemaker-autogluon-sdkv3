@@ -117,7 +117,7 @@ def main() -> None:
             perf = predictor.evaluate(test_data)
         else:
             perf = None
-        eval_metric_name = predictor.eval_metric
+        eval_metric_name = predictor.eval_metric.name if hasattr(predictor.eval_metric, "name") else str(predictor.eval_metric)
 
     elif task_type == "multimodal":
         import pandas as pd
