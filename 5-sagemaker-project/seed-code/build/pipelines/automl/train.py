@@ -159,22 +159,26 @@ def main() -> None:
     # SAGEMAKER_SUBMIT_DIRECTORY environment variables set on the model package's container
     # (see pipeline.py's ModelBuilder(source_code=SourceCode(..., entry_script="serve.py"))) --
     # without it, the container falls back to a default PyTorch handler that crashes on load
-    # (AutoGluon's output is predictor pickle files, not a .pth/.pt checkpoint). SageMaker's
-    # training toolkit extracts this training job's SourceCode (source_dir=BASE_DIR in
-    # pipeline.py, which includes serve.py) to /opt/ml/code inside this container -- copy it
-    # from there into {model_dir}/code/serve.py (same filename, so it matches
-    # SAGEMAKER_PROGRAM=serve.py exactly) so it ends up inside the model.tar.gz that SageMaker
-    # automatically uploads from SM_MODEL_DIR. This is deliberately done here (at training time)
-    # rather than relying on ModelBuilder/ModelStep's "runtime repack" mechanism: that mechanism
-    # silently never triggers for ModelBuilder.register() under a PipelineSession, because
-    # ModelStep's _append_repack_model_step() only recognizes plain
-    # sagemaker.core.resources.Model/PipelineModel instances via isinstance(), not ModelBuilder
-    # (confirmed by reading sagemaker-serve==1.16.0's and sagemaker-mlops==1.16.0's source
-    # directly) -- so SAGEMAKER_PROGRAM/SAGEMAKER_SUBMIT_DIRECTORY end up correctly set on the
-    # registered model package's container environment, but the actual code/ directory never
-    # gets added to the model artifact, and the container still crashes on load. Doing it here
-    # avoids depending on that broken code path entirely.
-    submit_dir = os.environ.get("SM_SUBMIT_DIRECTORY", "/opt/ml/code")
+    # (AutoGluon's output is predictor pickle files, not a .pth/.pt checkpoint).
+    #
+    # ModelTrainer (SDK v3) mounts its SourceCode as a distinct "code" input *channel* at
+    # /opt/ml/input/data/code (env var SM_CHANNEL_CODE) -- NOT at /opt/ml/code, which is the
+    # legacy Estimator/sagemaker-training-toolkit convention. Confirmed directly from a real
+    # training job's own logs: SM_CHANNEL_CODE=/opt/ml/input/data/code, and a first attempt at
+    # this fix using /opt/ml/code found nothing there and logged the "not found" warning below
+    # every time. Copy serve.py from the SM_CHANNEL_CODE directory into {model_dir}/code/serve.py
+    # (same filename, so it matches SAGEMAKER_PROGRAM=serve.py exactly) so it ends up inside the
+    # model.tar.gz that SageMaker automatically uploads from SM_MODEL_DIR. This is deliberately
+    # done here (at training time) rather than relying on ModelBuilder/ModelStep's "runtime
+    # repack" mechanism: that mechanism silently never triggers for ModelBuilder.register()
+    # under a PipelineSession, because ModelStep's _append_repack_model_step() only recognizes
+    # plain sagemaker.core.resources.Model/PipelineModel instances via isinstance(), not
+    # ModelBuilder (confirmed by reading sagemaker-serve==1.16.0's and sagemaker-mlops==1.16.0's
+    # source directly) -- so SAGEMAKER_PROGRAM/SAGEMAKER_SUBMIT_DIRECTORY end up correctly set
+    # on the registered model package's container environment, but the actual code/ directory
+    # never gets added to the model artifact, and the container still crashes on load. Doing it
+    # here avoids depending on that broken code path entirely.
+    submit_dir = os.environ.get("SM_CHANNEL_CODE", "/opt/ml/input/data/code")
     serve_script_src = os.path.join(submit_dir, "serve.py")
     if os.path.exists(serve_script_src):
         code_dir = os.path.join(save_path, "code")
