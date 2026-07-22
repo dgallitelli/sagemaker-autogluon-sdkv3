@@ -35,7 +35,8 @@
       "iam:PutRolePolicy",
       "iam:DeleteRolePolicy",
       "iam:GetRole",
-      "iam:PassRole"
+      "iam:PassRole",
+      "iam:TagRole"
     ],
     "Resource": "arn:aws:iam::*:role/sagemaker-*-batch-transform-lambda"
   }
