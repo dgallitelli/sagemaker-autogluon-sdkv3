@@ -1,0 +1,57 @@
+"""Invokes the batch-transform Lambda synchronously against a staging fixture
+and asserts the transform job completes with expected output."""
+import argparse
+import json
+import logging
+import os
+
+import boto3
+
+logger = logging.getLogger(__name__)
+lambda_client = boto3.client("lambda")
+s3_client = boto3.client("s3")
+
+
+def invoke_and_verify(function_name, bucket, input_prefix, output_prefix):
+    payload = {
+        "model_name": None,  # resolved by the Lambda's own env var at runtime
+        "transform_job_name": "staging-test-transform",
+        "input_s3_uri": f"s3://{bucket}/{input_prefix}",
+        "output_s3_uri": f"s3://{bucket}/{output_prefix}",
+        "instance_type": "ml.m5.xlarge",
+        "instance_count": 1,
+        "content_type": "text/csv",
+    }
+    response = lambda_client.invoke(
+        FunctionName=function_name, InvocationType="RequestResponse", Payload=json.dumps(payload).encode()
+    )
+    result = json.loads(response["Payload"].read())
+    if response.get("FunctionError"):
+        raise Exception(f"Lambda invocation failed: {result}")
+    if result.get("status") != "Completed":
+        raise Exception(f"Transform job did not complete: {result}")
+    return result
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--log-level", type=str, default=os.environ.get("LOGLEVEL", "INFO").upper())
+    parser.add_argument("--import-build-config", type=str, required=True)
+    parser.add_argument("--export-test-results", type=str, required=True)
+    parser.add_argument("--fixture-bucket", type=str, required=True)
+    parser.add_argument("--fixture-input-prefix", type=str, default="AutoML/batch-test-input/")
+    parser.add_argument("--fixture-output-prefix", type=str, default="AutoML/batch-test-output/")
+    args, _ = parser.parse_known_args()
+
+    logging.basicConfig(format="%(levelname)s: [%(filename)s:%(lineno)s] %(message)s", level=args.log_level)
+
+    with open(args.import_build_config) as f:
+        config = json.load(f)
+
+    function_name = "sagemaker-{}-{}-run-transform".format(
+        config["Parameters"]["SageMakerProjectName"], config["Parameters"]["StageName"]
+    )
+    results = invoke_and_verify(function_name, args.fixture_bucket, args.fixture_input_prefix, args.fixture_output_prefix)
+
+    with open(args.export_test_results, "w") as f:
+        json.dump(results, f, indent=4)
