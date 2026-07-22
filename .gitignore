@@ -37,3 +37,6 @@ blog-diagrams/
 
 # Test scripts
 **/test_deploy.py
+
+# Subagent-driven-development scratch state
+.superpowers/
