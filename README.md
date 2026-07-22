@@ -10,6 +10,7 @@ This repository demonstrates three ML use cases end-to-end, plus a custom Docker
 | **TimeSeries Forecasting** | Multi-item forecasting | UCI Electricity | MASE |
 | **Multimodal** | Text + tabular fusion | Synthetic churn (text + numerical + categorical) | ROC AUC |
 | **Custom Image** | Custom Docker images | UCI Adult Census | ROC AUC |
+| **SageMaker Project** | CI/CD MLOps platform | Pluggable (tabular/timeseries/multimodal) | Same as AutoGluon task |
 
 The first three experiments follow the same four-stage structure and demonstrate SageMaker SDK v3 patterns for processing, training, real-time inference, and ML pipelines. The custom image experiment shows how to build and use your own Docker images with the latest AutoGluon version.
 
@@ -36,6 +37,11 @@ The first three experiments follow the same four-stage structure and demonstrate
   ag-dlc-upgrade/             # Upgrade AutoGluon DLC base image
   pytorch-dlc/                # Install AutoGluon on PyTorch DLC base
   (each contains: docker/, 0-build-push/, 1-training/, 2-inference/, 3-pipeline/)
+
+5-sagemaker-project/           # SageMaker Projects CI/CD (Build + Deploy pipelines)
+  0-project-setup/
+  cfn-templates/
+  seed-code/{build,deploy}/
 ```
 
 ## Prerequisites
