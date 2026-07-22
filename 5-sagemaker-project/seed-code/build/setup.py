@@ -19,7 +19,7 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=["tests"]),
     include_package_data=True,
     python_requires=">=3.10",
-    install_requires=["sagemaker>=3.5.0,<4.0", "boto3", "pyyaml"],
+    install_requires=["sagemaker>=3.5.0,<4.0", "boto3", "pyyaml", "pandas", "scikit-learn"],
     extras_require={"test": ["pytest", "pytest-cov"]},
     entry_points={
         "console_scripts": [
