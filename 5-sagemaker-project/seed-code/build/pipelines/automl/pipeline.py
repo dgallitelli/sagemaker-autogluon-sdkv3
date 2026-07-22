@@ -48,6 +48,29 @@ def get_pipeline_custom_tags(new_tags, region, sagemaker_project_name=None):
     return new_tags
 
 
+def _retrieve_autogluon_training_image(region, ag_version, py_version, instance_type):
+    """Resolve the AutoGluon training image URI.
+
+    Works around a persistent bug in sagemaker SDK's bundled image config
+    (confirmed across versions 3.5.0-3.16.0): it lists only py311 as valid
+    for AutoGluon 1.5.0, even though AWS ECR only publishes py312 images
+    for that version. For ag_version=1.5/py_version=py312 specifically,
+    resolve the registry/repository via a working py_version first, then
+    substitute the real, confirmed-existing ECR tag.
+    """
+    if ag_version == "1.5" and py_version == "py312":
+        base_uri = image_uris.retrieve(
+            "autogluon", region=region, version=ag_version, py_version="py311",
+            image_scope="training", instance_type=instance_type,
+        )
+        registry_and_repo = base_uri.split(":")[0]
+        return f"{registry_and_repo}:1.5-cpu-py312-ubuntu22.04-v1"
+    return image_uris.retrieve(
+        "autogluon", region=region, version=ag_version, py_version=py_version,
+        image_scope="training", instance_type=instance_type,
+    )
+
+
 def get_pipeline(
     region,
     role=None,
@@ -60,12 +83,12 @@ def get_pipeline(
     # NOTE: sagemaker==3.16.0's bundled image_uri_config/autogluon.json only
     # validates py311 for AutoGluon training version 1.5.0, while AWS DLC's ECR
     # repository (763104351884.dkr.ecr.<region>.amazonaws.com/autogluon-training)
-    # publishes only py312 tags for 1.5.0 (no py311 variant exists). Until the SDK
-    # ships updated image URI config data, image_uris.retrieve(version="1.5",
-    # py_version="py312", ...) raises ValueError for every region. 1.4/py311 is the
-    # newest combination that is both SDK-valid and has a real ECR image.
-    ag_version="1.4",
-    py_version="py311",
+    # publishes only py312 tags for 1.5.0 (no py311 variant exists). This repo's
+    # standard is AutoGluon 1.5/py312 (matches the other four experiments), so
+    # _retrieve_autogluon_training_image() below works around the stale SDK
+    # config directly instead of downgrading the target version.
+    ag_version="1.5",
+    py_version="py312",
     config_file="tabular.yaml",
     sagemaker_project_name=None,
 ):
@@ -99,10 +122,7 @@ def get_pipeline(
     param_model_approval_status = ParameterString(name="ModelApprovalStatus", default_value="PendingManualApproval")
     param_metric_threshold = ParameterFloat(name="MetricThreshold", default_value=0.75)
 
-    ag_training_image = image_uris.retrieve(
-        "autogluon", region=region, version=ag_version, py_version=py_version,
-        image_scope="training", instance_type=training_instance_type,
-    )
+    ag_training_image = _retrieve_autogluon_training_image(region, ag_version, py_version, training_instance_type)
     sklearn_image = image_uris.retrieve("sklearn", region=region, version="1.2-1")
 
     # -- Step 1: Preprocess --
