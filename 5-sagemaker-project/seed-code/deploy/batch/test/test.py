@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import time
 
 import boto3
 
@@ -13,9 +14,13 @@ s3_client = boto3.client("s3")
 
 
 def invoke_and_verify(function_name, bucket, input_prefix, output_prefix):
+    # SageMaker transform job names must be unique per account/region; a hardcoded name
+    # collides with a job left over from any prior pipeline run/retry (ResourceInUse), so
+    # suffix with a timestamp.
+    transform_job_name = f"staging-test-transform-{int(time.time())}"
     payload = {
         "model_name": None,  # resolved by the Lambda's own env var at runtime
-        "transform_job_name": "staging-test-transform",
+        "transform_job_name": transform_job_name,
         "input_s3_uri": f"s3://{bucket}/{input_prefix}",
         "output_s3_uri": f"s3://{bucket}/{output_prefix}",
         "instance_type": "ml.m5.xlarge",
