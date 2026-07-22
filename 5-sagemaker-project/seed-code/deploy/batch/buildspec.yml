@@ -9,6 +9,10 @@ phases:
 
   build:
     commands:
+      # CodeBuild's Source.BuildSpec path only tells it which file to read; the working
+      # directory during `commands:` is always the repo root (this repo has both realtime/
+      # and batch/ at the top level), so every path below is relative to `batch/`.
+      - cd batch
       - python build.py --model-execution-role "$MODEL_EXECUTION_ROLE_ARN" --model-package-group-name "$SOURCE_MODEL_PACKAGE_GROUP_NAME" --sagemaker-project-id "$SAGEMAKER_PROJECT_ID" --sagemaker-project-name "$SAGEMAKER_PROJECT_NAME" --s3-bucket "$ARTIFACT_BUCKET" --export-staging-config $EXPORT_TEMPLATE_STAGING_CONFIG --export-prod-config $EXPORT_TEMPLATE_PROD_CONFIG
       - cd lambda && zip -r ../run_transform.zip run_transform.py && cd ..
       - aws s3 cp run_transform.zip "s3://${ARTIFACT_BUCKET}/AutoML/lambda/staging/run_transform.zip"
@@ -18,6 +22,7 @@ phases:
       - cat $EXPORT_TEMPLATE_PROD_CONFIG
 
 artifacts:
+  base-directory: batch
   files:
     - $EXPORT_TEMPLATE_NAME
     - $EXPORT_TEMPLATE_STAGING_CONFIG
