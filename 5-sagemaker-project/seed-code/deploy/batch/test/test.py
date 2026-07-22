@@ -7,9 +7,18 @@ import os
 import uuid
 
 import boto3
+from botocore.config import Config
 
 logger = logging.getLogger(__name__)
-lambda_client = boto3.client("lambda")
+# The run-transform Lambda has a 900s (15 min) timeout and legitimately blocks for the full
+# transform job duration (it polls create_transform_job to completion before returning).
+# botocore's default read_timeout is only 60s, and its standard retry mode treats a client-side
+# read timeout on a synchronous Invoke as retriable, silently re-sending the *same* payload
+# (same transform_job_name) once the timeout fires — even though the original Lambda invocation
+# is still running server-side. That produces two concurrent CreateTransformJob calls with an
+# identical job name, which SageMaker rejects with ResourceInUse. Set read_timeout above the
+# Lambda's own timeout and disable retries so a slow-but-legitimate invocation is never resent.
+lambda_client = boto3.client("lambda", config=Config(read_timeout=910, retries={"max_attempts": 0}))
 s3_client = boto3.client("s3")
 
 
