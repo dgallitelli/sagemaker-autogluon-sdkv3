@@ -71,6 +71,35 @@ def _retrieve_autogluon_training_image(region, ag_version, py_version, instance_
     )
 
 
+def _resolve_config_path(config_file):
+    """Locate a config/*.yaml file across both install modes this pipeline runs under.
+
+    Editable installs (local dev) resolve config/ as a sibling of the
+    installed pipelines/ package via __file__. Non-editable installs (what
+    CodeBuild's `pip install --force-reinstall .` produces) don't package
+    config/ as package data, so __file__-relative resolution fails there;
+    CodeBuild always invokes run-pipeline from the checked-out source root,
+    where config/ is a real sibling directory on disk, so cwd-relative
+    resolution covers that case.
+    """
+    build_root = os.path.dirname(os.path.dirname(BASE_DIR))
+    package_relative = os.path.join(build_root, "config", config_file)
+    if os.path.exists(package_relative):
+        return package_relative
+
+    cwd_relative = os.path.join(os.getcwd(), "config", config_file)
+    if os.path.exists(cwd_relative):
+        return cwd_relative
+
+    raise FileNotFoundError(
+        f"Could not find config file {config_file!r} at {package_relative!r} "
+        f"or {cwd_relative!r}. This can happen after a non-editable `pip "
+        "install .` (config/ is not packaged as package data) run from "
+        "somewhere other than the repo checkout root — run from the "
+        "checkout root, or use an editable install (`pip install -e .`)."
+    )
+
+
 def get_pipeline(
     region,
     role=None,
@@ -105,10 +134,8 @@ def get_pipeline(
 
     # Read eval_metric from the local config file (uploaded to S3 by the buildspec
     # before this pipeline is built) so the ConditionStep's JsonGet knows which key
-    # to read out of evaluation.json. BASE_DIR is .../pipelines/automl; config/ is
-    # two levels up, at the package root (.../build/config/).
-    build_root = os.path.dirname(os.path.dirname(BASE_DIR))
-    config_path = os.path.join(build_root, "config", config_file)
+    # to read out of evaluation.json.
+    config_path = _resolve_config_path(config_file)
     with open(config_path) as f:
         eval_metric = yaml.safe_load(f).get("eval_metric", "roc_auc")
 
