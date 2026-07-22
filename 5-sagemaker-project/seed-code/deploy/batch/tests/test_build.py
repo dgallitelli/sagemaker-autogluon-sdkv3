@@ -21,3 +21,4 @@ def test_extend_config_adds_lambda_code_location():
 
     assert result["Parameters"]["LambdaCodeS3Bucket"] == "test-bucket"
     assert result["Parameters"]["LambdaCodeS3Key"] == "AutoML/lambda/staging/run_transform.zip"
+    assert len(result["Parameters"]["LambdaResourceNamePrefix"]) <= 31

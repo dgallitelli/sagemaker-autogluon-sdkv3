@@ -33,6 +33,17 @@ Parameters:
   LambdaCodeS3Key:
     Type: String
     Description: S3 key of the run_transform.py Lambda deployment zip.
+  LambdaResourceNamePrefix:
+    Type: String
+    Description: >
+      Length-safe, unique prefix for the Lambda/IAM-role/EventBridge-rule
+      names below, computed once per deploy (via sagemaker.core.utils.name_from_base)
+      to stay under IAM's 64-char RoleName and EventBridge's 64-char Rule
+      Name limits regardless of SageMakerProjectName length. This value
+      includes a timestamp and changes on every deploy, so CloudFormation
+      replaces (rather than updates in place) the IAM role, Lambda function,
+      and EventBridge rule on each pipeline run — accepted tradeoff for
+      guaranteed length-safety.
 
 Conditions:
   IsScheduleEnabled: !Equals [!Ref ScheduleEnabled, "true"]
@@ -48,7 +59,7 @@ Resources:
   RunTransformLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub sagemaker-${SageMakerProjectName}-${StageName}-batch-transform-lambda
+      RoleName: !Sub sagemaker-${LambdaResourceNamePrefix}-batch-transform-lambda
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -70,7 +81,7 @@ Resources:
   RunTransformLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub sagemaker-${SageMakerProjectName}-${StageName}-run-transform
+      FunctionName: !Sub sagemaker-${LambdaResourceNamePrefix}-run-transform
       Runtime: python3.12
       Handler: run_transform.handler
       Role: !GetAtt RunTransformLambdaRole.Arn
@@ -89,7 +100,7 @@ Resources:
   ScheduleRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub sagemaker-${SageMakerProjectName}-${StageName}-batch-schedule
+      Name: !Sub sagemaker-${LambdaResourceNamePrefix}-batch-schedule
       ScheduleExpression: !Ref ScheduleExpression
       State: !If [IsScheduleEnabled, ENABLED, DISABLED]
       Targets:

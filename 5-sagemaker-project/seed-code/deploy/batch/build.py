@@ -9,6 +9,7 @@ import os
 
 import boto3
 from botocore.exceptions import ClientError
+from sagemaker.core.utils import name_from_base
 
 logger = logging.getLogger(__name__)
 sm_client = boto3.client("sagemaker")
@@ -64,6 +65,13 @@ def extend_config(args, model_package_arn, stage_config):
         "DataCaptureUploadPath": "s3://" + args.s3_bucket + "/datacapture-" + stage_name,
         "LambdaCodeS3Bucket": args.s3_bucket,
         "LambdaCodeS3Key": f"AutoML/lambda/{stage_name}/run_transform.zip",
+        # name_from_base appends a fresh timestamp on every call (no way to seed it
+        # deterministically), so this prefix differs on each build.py execution. That's
+        # accepted: it keeps the IAM RoleName/Lambda FunctionName/EventBridge Rule Name
+        # under their respective 64-char limits regardless of SageMakerProjectName length,
+        # at the cost of CloudFormation replacing (not updating in place) those three
+        # resources on every deploy.
+        "LambdaResourceNamePrefix": name_from_base(args.sagemaker_project_name, max_length=31),
     }
     new_tags = {
         "sagemaker:deployment-stage": stage_name,
