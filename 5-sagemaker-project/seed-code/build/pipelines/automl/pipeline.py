@@ -251,9 +251,10 @@ def get_pipeline(
     # testing.
     #
     # The actual code/serve.py packaging happens in train.py (it copies serve.py from
-    # /opt/ml/code, where SageMaker's training toolkit extracts this training job's own
-    # SourceCode, into {model_dir}/code/serve.py so it's included in the model.tar.gz SageMaker
-    # auto-uploads from SM_MODEL_DIR) — NOT via ModelBuilder/ModelStep's "runtime repack"
+    # SM_CHANNEL_CODE, where ModelTrainer mounts this training job's own SourceCode at
+    # /opt/ml/input/data/code, into {model_dir}/code/serve.py so it's included in the
+    # model.tar.gz SageMaker auto-uploads from SM_MODEL_DIR) — NOT via ModelBuilder/ModelStep's
+    # "runtime repack"
     # mechanism, which looks like the natural SDK v3 fit here (pass source_code=SourceCode(...)
     # to ModelBuilder, matching ModelTrainer's own pattern above) but is silently a no-op:
     # ModelStep._append_repack_model_step() only inserts a _RepackModelStep when

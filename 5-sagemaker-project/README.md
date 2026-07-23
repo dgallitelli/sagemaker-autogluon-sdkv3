@@ -167,11 +167,13 @@ aws sagemaker delete-model-package-group --model-package-group-name <project-nam
 gh repo delete <owner>/<project-name>-build --yes
 gh repo delete <owner>/<project-name>-deploy --yes
 
-# 6. Delete S3 artifacts — three locations
+# 6. Delete S3 artifacts — all locations
 aws s3 rm s3://sagemaker-project-<project-id>/ --recursive
-aws s3 rm s3://<sdk-default-bucket>/<project-name>-<project-id>/ --recursive
-aws s3 rm s3://<sdk-default-bucket>/<project-name>-<project-id>-train/ --recursive
 aws s3 rm s3://<sdk-default-bucket>/sagemaker-projects-templates/<project-name>-project-template.yaml
+# NOTE: The artifact bucket (ARTIFACT_BUCKET, e.g. sagemaker-project-<project-id>) is used for
+# all pipeline artifacts in this workflow, so the SDK default bucket (`sagemaker-us-east-1-<account-id>`)
+# is only used for the CFN template itself. If you manually set default_bucket to a different value,
+# also clean: aws s3 rm s3://<custom-default-bucket>/<project-name>-<project-id>/ --recursive
 ```
 
 Verify nothing is left with a final sweep:
@@ -179,7 +181,7 @@ Verify nothing is left with a final sweep:
 aws sagemaker list-projects --query "ProjectSummaryList[?ProjectName=='<project-name>']"
 aws sagemaker list-endpoints --query "Endpoints[?contains(EndpointName,'<project-name>')]"
 aws cloudformation list-stacks --query "StackSummaries[?contains(StackName,'<project-id>') && StackStatus!='DELETE_COMPLETE']"
-aws events list-rules --query "Rules[?contains(Name,'<project-id>')]"
+aws events list-rules --query "Rules[?contains(Name,'<project-name>') || contains(Name,'<project-id>')]"
 aws sagemaker list-model-package-groups --query "ModelPackageGroupSummaryList[?contains(ModelPackageGroupName,'<project-id>')]"
 ```
 
