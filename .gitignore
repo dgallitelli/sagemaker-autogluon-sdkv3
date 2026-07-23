@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+!5-sagemaker-project/seed-code/build/
 
 # Virtual environments
 .venv/
@@ -37,3 +38,6 @@ blog-diagrams/
 
 # Test scripts
 **/test_deploy.py
+
+# Subagent-driven-development scratch state
+.superpowers/
