@@ -17,9 +17,18 @@ POLL_INTERVAL_SECONDS = 30
 MAX_POLL_ATTEMPTS = 120  # 60 minutes
 
 
+REQUIRED_EVENT_KEYS = ["transform_job_name", "input_s3_uri", "content_type", "output_s3_uri", "instance_type", "instance_count"]
+
+
 def handler(event, context):
+    missing = [key for key in REQUIRED_EVENT_KEYS if key not in event]
+    if missing:
+        raise ValueError(f"Missing required event parameters: {', '.join(missing)}")
+
     transform_job_name = event["transform_job_name"]
-    model_name = event.get("model_name") or os.environ["MODEL_NAME"]
+    model_name = event.get("model_name") or os.environ.get("MODEL_NAME")
+    if not model_name:
+        raise ValueError("model_name must be provided in the event or the MODEL_NAME environment variable must be set")
 
     sm_client.create_transform_job(
         TransformJobName=transform_job_name,

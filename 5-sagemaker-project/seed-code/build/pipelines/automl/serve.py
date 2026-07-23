@@ -34,9 +34,12 @@ def model_fn(model_dir):
 
     from autogluon.multimodal import MultiModalPredictor
 
-    model = MultiModalPredictor.load(model_dir)
-    globals()["task_type"] = "multimodal"
-    return model
+    try:
+        model = MultiModalPredictor.load(model_dir)
+        globals()["task_type"] = "multimodal"
+        return model
+    except Exception as e:
+        raise RuntimeError(f"Failed to load any AutoGluon predictor from {model_dir}: {e}") from e
 
 
 def transform_fn(model, request_body, input_content_type, output_content_type="application/json"):
