@@ -92,10 +92,6 @@ Resources:
       Environment:
         Variables:
           MODEL_NAME: !GetAtt Model.ModelName
-          INPUT_S3_URI: !Sub "${DataCaptureUploadPath}/batch-input/"
-          OUTPUT_S3_URI: !Sub "${DataCaptureUploadPath}/batch-output/"
-          TRANSFORM_INSTANCE_TYPE: !Ref TransformInstanceType
-          TRANSFORM_INSTANCE_COUNT: !Ref TransformInstanceCount
 
   ScheduleRule:
     Type: AWS::Events::Rule

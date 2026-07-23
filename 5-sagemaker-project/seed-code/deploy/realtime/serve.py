@@ -51,8 +51,7 @@ def transform_fn(model, request_body, input_content_type, output_content_type="a
     elif input_content_type == "text/csv":
         # This same model/container is used for both real-time invocations (which send a CSV
         # header, matching the training column order) and batch-transform jobs (which send
-        # headerless CSV, one row per raw record — see the batch-transform Lambda's fixture and
-        # serve_batch.py's original headerless-only handling). Detect which case this is: if the
+        # headerless CSV, one row per raw record). Detect which case this is: if the
         # parsed header row doesn't match the model's known training feature names, re-parse as
         # headerless and assign the known column order instead.
         data = pd.read_csv(StringIO(request_body_str))

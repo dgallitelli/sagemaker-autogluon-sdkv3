@@ -42,7 +42,6 @@ seed-code/
       build.py, buildspec.yml, batch-transform-template.yml
       staging-config.json, prod-config.json
       lambda/run_transform.py
-      serve_batch.py
       test/{buildspec.yml,test.py}
       tests/
 ```
@@ -85,7 +84,7 @@ seed-code/
    Adult Census feature columns as `seed-code/build/config/tabular.yaml`:
    ```bash
    # Create a minimal fixture matching your model's training schema (headerless CSV)
-   # Example for Adult Census (matching serve_batch.py's expected input):
+   # Example for Adult Census (matching serve.py's headerless batch-transform handling):
    cat > fixture.csv << 'EOF'
    39,State-gov,77516,Bachelors,13,Never-married,Adm-clerical,Not-in-family,White,Male,2174,0,40,United-States
    50,Self-emp-inc,83311,Bachelors,13,Married-civ-spouse,Exec-managerial,Husband,White,Male,0,0,13,United-States
