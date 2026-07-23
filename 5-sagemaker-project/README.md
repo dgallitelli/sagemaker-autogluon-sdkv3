@@ -126,7 +126,11 @@ seed-code/
 - **Timeseries / Multimodal**: replace `seed-code/build/pipelines/automl/preprocess.py` with a
   script matching your data shape (see `2-timeseries-forecasting/0-data-prep/preprocess.py` and
   `3-multimodal/0-data-prep/preprocess.py` in this repo for worked examples), then use
-  `config/timeseries.yaml`/`config/multimodal.yaml` as your starting config.
+  `config/timeseries.yaml`/`config/multimodal.yaml` as your starting config. Also set the
+  `CONFIG_FILE` environment variable on the ModelBuild CodeBuild project (Console: project
+  Settings > Environment > Environment variables, or `aws codebuild start-build
+  --environment-variables-override`) to the matching filename, otherwise the pipeline keeps
+  using `tabular.yaml`.
 
 ## Cleanup
 
